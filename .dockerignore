@@ -18,9 +18,15 @@
 # Сборки и кэш (пересобираем в Docker)
 frontend/dist
 
+# SQLite (в контейнере используется PostgreSQL)
+**/*.db
+**/*.db-wal
+**/*.db-shm
+
 # Прочее
 .DS_Store
 *.md
 .env
 .env.*
 !.env.example
+docker-compose.yml

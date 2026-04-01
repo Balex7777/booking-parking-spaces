@@ -1,9 +1,9 @@
 import * as db from '../db/store.js'
 
-export function getAllParkings() {
+export async function getAllParkings() {
   return db.getParkings()
 }
 
-export function getParkingById(id) {
+export async function getParkingById(id) {
   return db.getParkingById(id)
 }

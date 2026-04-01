@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 backend/data/db.json
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+
+# Env-файлы с реальными секретами
+.env
+.env.local
+.env.*.local
 
 # Editor directories and files
 .vscode/*

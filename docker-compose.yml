@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: parking
+      POSTGRES_PASSWORD: parking_secret
+      POSTGRES_DB: parking
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parking"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      PORT: 8080
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DATABASE_URL: postgres://parking:parking_secret@db:5432/parking
+      CORS_ORIGIN: "*"
+      MIN_BOOKING_HOURS: 1
+      LOG_LEVEL: info
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pg_data:

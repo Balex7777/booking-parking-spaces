@@ -3,22 +3,22 @@ import * as bookingService from '../services/bookingService.js'
 
 const router = Router()
 
-router.get('/', (_req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    const bookings = bookingService.getAllBookings()
+    const bookings = await bookingService.getAllBookings()
     res.json(bookings)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { parkingId, spotNumber, date, timeFrom, timeTo } = req.body
     if (!parkingId || !spotNumber || !date || !timeFrom || !timeTo) {
       return res.status(400).json({ error: 'Не указаны обязательные поля: parkingId, spotNumber, date, timeFrom, timeTo' })
     }
-    const booking = bookingService.createBooking({
+    const booking = await bookingService.createBooking({
       parkingId,
       spotNumber,
       date,

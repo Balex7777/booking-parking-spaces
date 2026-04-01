@@ -1,6 +1,7 @@
 import * as db from '../db/store.js'
+import { config } from '../config.js'
 
-const MIN_BOOKING_HOURS = 1
+const MIN_BOOKING_HOURS = config.minBookingHours
 
 function parseTime(timeStr) {
   const [h, m] = timeStr.split(':').map(Number)
@@ -20,12 +21,12 @@ export function calculatePrice(pricePerHour, timeFrom, timeTo) {
   return billableHours * pricePerHour
 }
 
-export function getAllBookings() {
+export async function getAllBookings() {
   return db.getBookings()
 }
 
-export function createBooking({ parkingId, spotNumber, date, timeFrom, timeTo }) {
-  const parking = db.getParkingById(parkingId)
+export async function createBooking({ parkingId, spotNumber, date, timeFrom, timeTo }) {
+  const parking = await db.getParkingById(parkingId)
   if (!parking) {
     throw new Error('Парковка не найдена')
   }
@@ -34,7 +35,7 @@ export function createBooking({ parkingId, spotNumber, date, timeFrom, timeTo })
   }
   const hours = calculateTotalHours(timeFrom, timeTo)
   if (hours < MIN_BOOKING_HOURS) {
-    throw new Error('Минимальное время бронирования — 1 час')
+    throw new Error(`Минимальное время бронирования — ${MIN_BOOKING_HOURS} ч`)
   }
   const totalPrice = calculatePrice(parking.pricePerHour, timeFrom, timeTo)
   const id = 'b' + Date.now()
@@ -49,7 +50,7 @@ export function createBooking({ parkingId, spotNumber, date, timeFrom, timeTo })
     timeTo,
     totalPrice,
   }
-  db.addBooking(booking)
-  db.decrementParkingFreeSpots(parkingId)
+  await db.addBooking(booking)
+  await db.decrementParkingFreeSpots(parkingId)
   return booking
 }

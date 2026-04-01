@@ -3,18 +3,18 @@ import * as parkingService from '../services/parkingService.js'
 
 const router = Router()
 
-router.get('/', (_req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    const parkings = parkingService.getAllParkings()
+    const parkings = await parkingService.getAllParkings()
     res.json(parkings)
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
 })
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    const parking = parkingService.getParkingById(req.params.id)
+    const parking = await parkingService.getParkingById(req.params.id)
     if (!parking) {
       return res.status(404).json({ error: 'Парковка не найдена' })
     }
