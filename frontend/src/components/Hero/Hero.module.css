@@ -1,0 +1,22 @@
+.hero {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 3rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+}
+
+.hero h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.hero p {
+  margin: 0;
+  color: #475569;
+  line-height: 1.6;
+  font-size: 1.05rem;
+}
