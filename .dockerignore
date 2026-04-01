@@ -1,0 +1,26 @@
+# Зависимости (ставятся внутри образа)
+**/node_modules
+**/npm-debug.log*
+
+# Python (если появится)
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+
+# Git и IDE
+.git
+.gitignore
+.cursor
+.idea
+.vscode
+
+# Сборки и кэш (пересобираем в Docker)
+frontend/dist
+
+# Прочее
+.DS_Store
+*.md
+.env
+.env.*
+!.env.example
