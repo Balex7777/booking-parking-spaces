@@ -83,8 +83,10 @@ jobs:
           username: ${{ secrets.DEPLOY_USERNAME }}
           key: ${{ secrets.DEPLOY_KEY }}
           script: |
+            set -e
             cd ${{ vars.DEPLOY_PATH }}
             docker login ${{ env.REGISTRY }} -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
             docker-compose --env-file .env.release -f docker-compose.release.yml pull
+            docker-compose --env-file .env.release -f docker-compose.release.yml rm -sf app-1 app-2 app-3
             docker-compose --env-file .env.release -f docker-compose.release.yml up -d
             echo "release=${{ steps.release.outputs.image_tag }} environment=${{ steps.release.outputs.release_environment }}"
