@@ -3,6 +3,11 @@ import { config } from '../config.js'
 import { loadSeedData } from './seed.js'
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl })
+let hasLegacySessionIdColumn = false
+
+function getLegacySessionId(userId) {
+  return `user:${userId}`
+}
 
 export async function init() {
   await pool.query(`
@@ -43,6 +48,14 @@ export async function init() {
     ALTER TABLE bookings
     ADD COLUMN IF NOT EXISTS user_id TEXT
   `)
+  const legacySessionIdColumnResult = await pool.query(`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_name = 'bookings' AND column_name = 'session_id'
+    ) AS exists
+  `)
+  hasLegacySessionIdColumn = legacySessionIdColumnResult.rows[0].exists
   const demoUser = {
     id: 'seed-user',
     name: 'Демо пользователь',
@@ -60,6 +73,17 @@ export async function init() {
     SET user_id = 'seed-user'
     WHERE user_id IS NULL
   `)
+  if (hasLegacySessionIdColumn) {
+    await pool.query(`
+      UPDATE bookings
+      SET session_id = 'seed-session'
+      WHERE session_id IS NULL
+    `)
+    await pool.query(`
+      ALTER TABLE bookings
+      ALTER COLUMN session_id DROP NOT NULL
+    `)
+  }
   await pool.query(`
     ALTER TABLE bookings
     ALTER COLUMN user_id SET NOT NULL
@@ -80,11 +104,19 @@ export async function init() {
       )
     }
     for (const b of seed.bookings) {
-      await pool.query(
-        `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
-      )
+      if (hasLegacySessionIdColumn) {
+        await pool.query(
+          `INSERT INTO bookings (id, session_id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [b.id, 'seed-session', 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
+        )
+      } else {
+        await pool.query(
+          `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
+        )
+      }
     }
     console.log('[pg] Начальные данные загружены')
   }
@@ -135,12 +167,21 @@ export async function getBookings(userId) {
 }
 
 export async function addBooking(booking) {
-  await pool.query(
-    `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [booking.id, booking.userId, booking.parkingId, booking.parkingName, booking.address,
-     booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice],
-  )
+  if (hasLegacySessionIdColumn) {
+    await pool.query(
+      `INSERT INTO bookings (id, session_id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [booking.id, getLegacySessionId(booking.userId), booking.userId, booking.parkingId, booking.parkingName, booking.address,
+       booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice],
+    )
+  } else {
+    await pool.query(
+      `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [booking.id, booking.userId, booking.parkingId, booking.parkingName, booking.address,
+       booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice],
+    )
+  }
   return booking
 }
 

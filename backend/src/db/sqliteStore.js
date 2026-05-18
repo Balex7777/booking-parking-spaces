@@ -5,6 +5,11 @@ import { loadSeedData } from './seed.js'
 
 const dbPath = path.join(config.dataDir, 'parking.db')
 let db
+let hasLegacySessionIdColumn = false
+
+function getLegacySessionId(userId) {
+  return `user:${userId}`
+}
 
 export async function init() {
   db = new Database(dbPath)
@@ -45,9 +50,13 @@ export async function init() {
     )
   `)
   const bookingColumns = db.prepare("PRAGMA table_info(bookings)").all()
+  hasLegacySessionIdColumn = bookingColumns.some((column) => column.name === 'session_id')
   if (!bookingColumns.some((column) => column.name === 'user_id')) {
     db.exec("ALTER TABLE bookings ADD COLUMN user_id TEXT")
     db.exec("UPDATE bookings SET user_id = 'seed-user' WHERE user_id IS NULL")
+  }
+  if (hasLegacySessionIdColumn) {
+    db.exec("UPDATE bookings SET session_id = 'seed-session' WHERE session_id IS NULL")
   }
   db.exec("CREATE INDEX IF NOT EXISTS bookings_user_id_idx ON bookings(user_id)")
   db.prepare(
@@ -68,7 +77,16 @@ export async function init() {
     )
     const tx = db.transaction(() => {
       for (const p of seed.parkings) insP.run(p.id, p.name, p.address, p.totalSpots, p.freeSpots, p.pricePerHour, p.description)
-      for (const b of seed.bookings) insB.run(b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
+      for (const b of seed.bookings) {
+        if (hasLegacySessionIdColumn) {
+          db.prepare(
+            `INSERT INTO bookings (id,session_id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          ).run(b.id, 'seed-session', 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
+        } else {
+          insB.run(b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
+        }
+      }
     })
     tx()
     console.log('[sqlite] Начальные данные загружены')
@@ -115,11 +133,19 @@ export async function getBookings(userId) {
 }
 
 export async function addBooking(booking) {
-  db.prepare(
-    `INSERT INTO bookings (id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  ).run(booking.id, booking.userId, booking.parkingId, booking.parkingName, booking.address,
-    booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice)
+  if (hasLegacySessionIdColumn) {
+    db.prepare(
+      `INSERT INTO bookings (id,session_id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(booking.id, getLegacySessionId(booking.userId), booking.userId, booking.parkingId, booking.parkingName, booking.address,
+      booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice)
+  } else {
+    db.prepare(
+      `INSERT INTO bookings (id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(booking.id, booking.userId, booking.parkingId, booking.parkingName, booking.address,
+      booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice)
+  }
   return booking
 }
 
