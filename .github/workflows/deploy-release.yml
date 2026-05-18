@@ -85,6 +85,6 @@ jobs:
           script: |
             cd ${{ vars.DEPLOY_PATH }}
             docker login ${{ env.REGISTRY }} -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
-            docker compose --env-file .env.release -f docker-compose.release.yml pull
-            docker compose --env-file .env.release -f docker-compose.release.yml up -d
+            docker-compose --env-file .env.release -f docker-compose.release.yml pull
+            docker-compose --env-file .env.release -f docker-compose.release.yml up -d
             echo "release=${{ steps.release.outputs.image_tag }} environment=${{ steps.release.outputs.release_environment }}"
