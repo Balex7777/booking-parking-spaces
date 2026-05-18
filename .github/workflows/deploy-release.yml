@@ -21,7 +21,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   deploy:
@@ -38,6 +37,7 @@ jobs:
       - name: Resolve release metadata
         id: release
         run: |
+          image_name="${GITHUB_REPOSITORY,,}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             release_environment="${{ inputs.environment }}"
             image_tag="${{ inputs.image_tag }}"
@@ -47,7 +47,7 @@ jobs:
           fi
           echo "release_environment=${release_environment}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
-          echo "app_image=${REGISTRY}/${IMAGE_NAME}:${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "app_image=${REGISTRY}/${image_name}:${image_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Prepare release env file
         run: |
