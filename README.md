@@ -157,3 +157,75 @@ npm run load:test -- http://localhost:8080 90 18
 - страница "Мои бронирования" показывает данные текущей пользовательской сессии даже если запросы попадают на разные экземпляры приложения
 
 Если Redis не задан в локальной разработке, backend временно использует `MemoryStore`, но для масштабируемого окружения нужно задавать `REDIS_URL`.
+
+## API и наблюдаемость
+
+### 1. Доступ к данным только через API
+
+Внешний доступ к данным инкапсулирован за HTTP API:
+
+- роуты в `backend/src/routes/` принимают и валидируют запросы;
+- бизнес-логика находится в `backend/src/services/`;
+- детали хранения скрыты за `backend/src/db/store.js` и адаптерами `pgStore.js` / `sqliteStore.js`.
+
+Это означает, что клиент работает только через публичные методы приложения (`/api/auth`, `/api/parkings`, `/api/bookings`) и не имеет прямого доступа к PostgreSQL или SQLite.
+
+### 2. Структурные JSON-логи
+
+Backend использует собственный JSON-логгер из [backend/src/logger.js](/Users/morevaleksey/Documents/ПиРКСП/ikbo-12-23-morev/backend/src/logger.js:1). Каждая запись содержит:
+
+- `timestamp`
+- `level`
+- `service`
+- `event`
+- полезные поля события, например `requestId`, `userId`, `statusCode`, `durationMs`
+
+Пример записи:
+
+```json
+{"timestamp":"2026-05-18T20:15:31.456Z","level":"info","service":"parking-backend","event":"http.request.completed","requestId":"3d5e9f53-5e6f-43a5-a8bb-8f5d9d70d744","method":"POST","path":"/api/bookings","statusCode":201,"durationMs":24.31,"userId":"u1747599280000"}
+```
+
+### 3. Логи только в stdout/stderr
+
+- обычные события пишутся в `stdout`;
+- ошибки пишутся в `stderr`;
+- файловых логов в проекте нет.
+
+Это делает контейнер совместимым с типичным Docker logging flow без дополнительной настройки.
+
+### 4. Сквозной `X-Request-ID`
+
+Для каждого входящего HTTP-запроса backend:
+
+- принимает входящий `X-Request-ID`, если он уже был передан извне;
+- либо генерирует новый UUID;
+- возвращает его в ответном заголовке `X-Request-ID`;
+- добавляет этот `requestId` во все связанные логи по запросу.
+
+Так можно проследить путь одного запроса через access-log и бизнес-события.
+
+### 5. Просмотр логов в реальном времени
+
+Локально через Docker Compose:
+
+```bash
+docker compose up --build
+docker compose logs -f app-1 app-2 app-3 gateway
+```
+
+Для release-compose на сервере:
+
+```bash
+cd /opt/parking-app
+docker-compose --env-file .env.release -f docker-compose.release.yml logs -f app-1 app-2 app-3 gateway
+```
+
+Для проверки request tracing можно сделать несколько запросов:
+
+```bash
+curl -H "X-Request-ID: demo-req-1" http://localhost:8080/api/meta
+curl http://localhost:8080/api/parkings
+```
+
+После этого в потоке логов будут видны JSON-события с соответствующими `requestId`.

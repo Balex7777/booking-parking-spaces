@@ -32,6 +32,7 @@ services:
       PORT: 8080
       HOST: 0.0.0.0
       NODE_ENV: production
+      SERVICE_NAME: parking-backend
       DATABASE_URL: postgres://parking:parking_secret@db:5432/parking
       REDIS_URL: redis://redis:6379
       SESSION_SECRET: ${SESSION_SECRET:-local-compose-secret}

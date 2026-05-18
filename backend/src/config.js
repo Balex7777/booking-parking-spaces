@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const config = {
+  serviceName:     process.env.SERVICE_NAME ?? 'parking-backend',
   port:            Number(process.env.PORT ?? 3001),
   host:            process.env.HOST ?? '0.0.0.0',
   nodeEnv:         process.env.NODE_ENV ?? 'development',

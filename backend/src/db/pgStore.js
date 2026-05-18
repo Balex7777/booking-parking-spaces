@@ -1,5 +1,6 @@
 import pg from 'pg'
 import { config } from '../config.js'
+import { logger } from '../logger.js'
 import { loadSeedData } from './seed.js'
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl })
@@ -118,9 +119,9 @@ export async function init() {
         )
       }
     }
-    console.log('[pg] Начальные данные загружены')
+    logger.info('db.seed_loaded', { dbType: 'postgres' })
   }
-  console.log('[pg] База готова')
+  logger.info('db.ready', { dbType: 'postgres' })
 }
 
 function rowToParking(r) {

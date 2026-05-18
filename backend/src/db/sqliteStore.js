@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'path'
 import { config } from '../config.js'
+import { logger } from '../logger.js'
 import { loadSeedData } from './seed.js'
 
 const dbPath = path.join(config.dataDir, 'parking.db')
@@ -89,9 +90,9 @@ export async function init() {
       }
     })
     tx()
-    console.log('[sqlite] Начальные данные загружены')
+    logger.info('db.seed_loaded', { dbType: 'sqlite' })
   }
-  console.log(`[sqlite] База: ${dbPath}`)
+  logger.info('db.ready', { dbType: 'sqlite', dbPath })
 }
 
 function rowToParking(r) {
