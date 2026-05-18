@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useAuth } from '../auth/useAuth'
 import { getParkingById } from '../api/parkingsApi'
 import { createBooking } from '../api/bookingsApi'
 import { calculatePrice } from '../services/bookingService'
@@ -9,6 +10,8 @@ import bookingClasses from './ParkingDetailPage.module.css'
 
 function ParkingDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [parking, setParking] = useState<ParkingLot | null>(null)
   const [loading, setLoading] = useState(Boolean(id))
   const [spotNumber, setSpotNumber] = useState('')
@@ -29,6 +32,10 @@ function ParkingDetailPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!user) {
+      navigate('/login', { state: { from: { pathname: `/parkings/${id}` } } })
+      return
+    }
     if (!parking || !spotNumber || !date || !timeFrom || !timeTo) return
     setSubmitError(null)
     try {
@@ -78,6 +85,11 @@ function ParkingDetailPage() {
           </p>
         ) : (
           <form className={bookingClasses.form} onSubmit={handleSubmit}>
+            {!user && (
+              <p className={bookingClasses.error}>
+                Для бронирования нужно <Link to="/login">войти в аккаунт</Link> или <Link to="/register">зарегистрироваться</Link>.
+              </p>
+            )}
             {submitError && <p className={bookingClasses.error}>{submitError}</p>}
             <label>
               Номер места
@@ -119,7 +131,7 @@ function ParkingDetailPage() {
             {timeFrom && timeTo && (
               <p className={bookingClasses.total}>Итого: {totalPrice} ₽</p>
             )}
-            <button type="submit" className={bookingClasses.button}>Забронировать</button>
+            <button type="submit" className={bookingClasses.button}>{user ? 'Забронировать' : 'Войти для бронирования'}</button>
           </form>
         )}
       </div>

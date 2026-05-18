@@ -6,6 +6,15 @@ const pool = new pg.Pool({ connectionString: config.databaseUrl })
 
 export async function init() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL,
+      email           TEXT NOT NULL UNIQUE,
+      password_hash   TEXT NOT NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `)
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS parkings (
       id            TEXT PRIMARY KEY,
       name          TEXT NOT NULL,
@@ -19,7 +28,7 @@ export async function init() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bookings (
       id            TEXT PRIMARY KEY,
-      session_id    TEXT NOT NULL,
+      user_id       TEXT NOT NULL REFERENCES users(id),
       parking_id    TEXT NOT NULL REFERENCES parkings(id),
       parking_name  TEXT NOT NULL,
       address       TEXT NOT NULL,
@@ -32,20 +41,32 @@ export async function init() {
   `)
   await pool.query(`
     ALTER TABLE bookings
-    ADD COLUMN IF NOT EXISTS session_id TEXT
+    ADD COLUMN IF NOT EXISTS user_id TEXT
   `)
+  const demoUser = {
+    id: 'seed-user',
+    name: 'Демо пользователь',
+    email: 'demo@example.com',
+    passwordHash: 'seed-demo-hash',
+  }
+  await pool.query(
+    `INSERT INTO users (id, name, email, password_hash)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (email) DO NOTHING`,
+    [demoUser.id, demoUser.name, demoUser.email, demoUser.passwordHash],
+  )
   await pool.query(`
     UPDATE bookings
-    SET session_id = 'seed-session'
-    WHERE session_id IS NULL
+    SET user_id = 'seed-user'
+    WHERE user_id IS NULL
   `)
   await pool.query(`
     ALTER TABLE bookings
-    ALTER COLUMN session_id SET NOT NULL
+    ALTER COLUMN user_id SET NOT NULL
   `)
   await pool.query(`
-    CREATE INDEX IF NOT EXISTS bookings_session_id_idx
-    ON bookings(session_id)
+    CREATE INDEX IF NOT EXISTS bookings_user_id_idx
+    ON bookings(user_id)
   `)
 
   const { rows } = await pool.query('SELECT count(*)::int AS cnt FROM parkings')
@@ -60,9 +81,9 @@ export async function init() {
     }
     for (const b of seed.bookings) {
       await pool.query(
-        `INSERT INTO bookings (id, session_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+        `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [b.id, b.sessionId ?? 'seed-session', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
+        [b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
       )
     }
     console.log('[pg] Начальные данные загружены')
@@ -80,9 +101,18 @@ function rowToParking(r) {
 
 function rowToBooking(r) {
   return {
-    id: r.id, sessionId: r.session_id, parkingId: r.parking_id, parkingName: r.parking_name,
+    id: r.id, userId: r.user_id, parkingId: r.parking_id, parkingName: r.parking_name,
     address: r.address, spotNumber: r.spot_number, date: r.date,
     timeFrom: r.time_from, timeTo: r.time_to, totalPrice: r.total_price,
+  }
+}
+
+function rowToUser(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    passwordHash: r.password_hash,
   }
 }
 
@@ -96,19 +126,19 @@ export async function getParkingById(id) {
   return rows.length ? rowToParking(rows[0]) : null
 }
 
-export async function getBookings(sessionId) {
+export async function getBookings(userId) {
   const { rows } = await pool.query(
-    'SELECT * FROM bookings WHERE session_id = $1 ORDER BY id',
-    [sessionId],
+    'SELECT * FROM bookings WHERE user_id = $1 ORDER BY id',
+    [userId],
   )
   return rows.map(rowToBooking)
 }
 
 export async function addBooking(booking) {
   await pool.query(
-    `INSERT INTO bookings (id, session_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+    `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [booking.id, booking.sessionId, booking.parkingId, booking.parkingName, booking.address,
+    [booking.id, booking.userId, booking.parkingId, booking.parkingName, booking.address,
      booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice],
   )
   return booking
@@ -119,4 +149,23 @@ export async function decrementParkingFreeSpots(parkingId) {
     'UPDATE parkings SET free_spots = free_spots - 1 WHERE id = $1 AND free_spots > 0',
     [parkingId],
   )
+}
+
+export async function createUser(user) {
+  await pool.query(
+    `INSERT INTO users (id, name, email, password_hash)
+     VALUES ($1, $2, $3, $4)`,
+    [user.id, user.name, user.email, user.passwordHash],
+  )
+  return { id: user.id, name: user.name, email: user.email }
+}
+
+export async function getUserByEmail(email) {
+  const { rows } = await pool.query('SELECT * FROM users WHERE email = $1', [email])
+  return rows.length ? rowToUser(rows[0]) : null
+}
+
+export async function getUserById(id) {
+  const { rows } = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [id])
+  return rows.length ? rows[0] : null
 }

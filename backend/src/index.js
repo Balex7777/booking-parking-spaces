@@ -7,6 +7,7 @@ import { RedisStore } from 'connect-redis'
 import { createClient } from 'redis'
 import { config } from './config.js'
 import { initDb } from './db/store.js'
+import authRouter from './routes/authRouter.js'
 import parkingsRouter from './routes/parkingsRouter.js'
 import bookingsRouter from './routes/bookingsRouter.js'
 
@@ -71,8 +72,10 @@ function registerRoutes() {
       releaseVersion: config.releaseVersion,
       environment: config.releaseEnv,
       sessionId: req.sessionID ?? null,
+      userId: req.session.userId ?? null,
     })
   })
+  app.use('/api/auth', authRouter)
   app.use('/api/parkings', parkingsRouter)
   app.use('/api/bookings', bookingsRouter)
 

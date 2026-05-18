@@ -9,6 +9,12 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
 .logoWrap {
   display: flex;
   align-items: center;
@@ -33,4 +39,55 @@
   font-weight: 600;
   color: #0f172a;
   margin: 0;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.userBadge {
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.authLink,
+.authButton {
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.authLink {
+  color: #334155;
+}
+
+.authButton {
+  border: none;
+  border-radius: 999px;
+  padding: 0.7rem 1rem;
+  background: #0f172a;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .account {
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
 }

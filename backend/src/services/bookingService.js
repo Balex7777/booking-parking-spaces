@@ -21,11 +21,11 @@ export function calculatePrice(pricePerHour, timeFrom, timeTo) {
   return billableHours * pricePerHour
 }
 
-export async function getAllBookings(sessionId) {
-  return db.getBookings(sessionId)
+export async function getAllBookings(userId) {
+  return db.getBookings(userId)
 }
 
-export async function createBooking({ parkingId, spotNumber, date, timeFrom, timeTo, sessionId }) {
+export async function createBooking({ parkingId, spotNumber, date, timeFrom, timeTo, userId }) {
   const parking = await db.getParkingById(parkingId)
   if (!parking) {
     throw new Error('Парковка не найдена')
@@ -41,7 +41,7 @@ export async function createBooking({ parkingId, spotNumber, date, timeFrom, tim
   const id = 'b' + Date.now()
   const booking = {
     id,
-    sessionId,
+    userId,
     parkingId,
     parkingName: parking.name,
     address: parking.address,

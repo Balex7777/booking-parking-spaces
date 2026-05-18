@@ -10,6 +10,7 @@ export type ParkingLot = {
 
 export type Booking = {
   id: string
+  userId: string
   parkingId: string
   parkingName: string
   address: string
@@ -20,10 +21,27 @@ export type Booking = {
   totalPrice: number
 }
 
+export type AuthUser = {
+  id: string
+  name: string
+  email: string
+}
+
 export type CreateBookingPayload = {
   parkingId: string
   spotNumber: string
   date: string
   timeFrom: string
   timeTo: string
+}
+
+export type LoginPayload = {
+  email: string
+  password: string
+}
+
+export type RegisterPayload = {
+  name: string
+  email: string
+  password: string
 }

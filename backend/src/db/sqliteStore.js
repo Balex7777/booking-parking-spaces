@@ -11,6 +11,15 @@ export async function init() {
   db.pragma('journal_mode = WAL')
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id             TEXT PRIMARY KEY,
+      name           TEXT NOT NULL,
+      email          TEXT NOT NULL UNIQUE,
+      password_hash  TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  db.exec(`
     CREATE TABLE IF NOT EXISTS parkings (
       id             TEXT PRIMARY KEY,
       name           TEXT NOT NULL,
@@ -24,7 +33,7 @@ export async function init() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS bookings (
       id            TEXT PRIMARY KEY,
-      session_id    TEXT NOT NULL,
+      user_id       TEXT NOT NULL REFERENCES users(id),
       parking_id    TEXT NOT NULL REFERENCES parkings(id),
       parking_name  TEXT NOT NULL,
       address       TEXT NOT NULL,
@@ -36,11 +45,15 @@ export async function init() {
     )
   `)
   const bookingColumns = db.prepare("PRAGMA table_info(bookings)").all()
-  if (!bookingColumns.some((column) => column.name === 'session_id')) {
-    db.exec("ALTER TABLE bookings ADD COLUMN session_id TEXT")
-    db.exec("UPDATE bookings SET session_id = 'seed-session' WHERE session_id IS NULL")
+  if (!bookingColumns.some((column) => column.name === 'user_id')) {
+    db.exec("ALTER TABLE bookings ADD COLUMN user_id TEXT")
+    db.exec("UPDATE bookings SET user_id = 'seed-user' WHERE user_id IS NULL")
   }
-  db.exec("CREATE INDEX IF NOT EXISTS bookings_session_id_idx ON bookings(session_id)")
+  db.exec("CREATE INDEX IF NOT EXISTS bookings_user_id_idx ON bookings(user_id)")
+  db.prepare(
+    `INSERT OR IGNORE INTO users (id, name, email, password_hash)
+     VALUES (?, ?, ?, ?)`,
+  ).run('seed-user', 'Демо пользователь', 'demo@example.com', 'seed-demo-hash')
 
   const cnt = db.prepare('SELECT count(*) AS cnt FROM parkings').get().cnt
   if (cnt === 0) {
@@ -50,12 +63,12 @@ export async function init() {
        VALUES (?,?,?,?,?,?,?)`,
     )
     const insB = db.prepare(
-      `INSERT INTO bookings (id,session_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+      `INSERT INTO bookings (id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
        VALUES (?,?,?,?,?,?,?,?,?,?)`,
     )
     const tx = db.transaction(() => {
       for (const p of seed.parkings) insP.run(p.id, p.name, p.address, p.totalSpots, p.freeSpots, p.pricePerHour, p.description)
-      for (const b of seed.bookings) insB.run(b.id, b.sessionId ?? 'seed-session', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
+      for (const b of seed.bookings) insB.run(b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
     })
     tx()
     console.log('[sqlite] Начальные данные загружены')
@@ -73,9 +86,18 @@ function rowToParking(r) {
 
 function rowToBooking(r) {
   return {
-    id: r.id, sessionId: r.session_id, parkingId: r.parking_id, parkingName: r.parking_name,
+    id: r.id, userId: r.user_id, parkingId: r.parking_id, parkingName: r.parking_name,
     address: r.address, spotNumber: r.spot_number, date: r.date,
     timeFrom: r.time_from, timeTo: r.time_to, totalPrice: r.total_price,
+  }
+}
+
+function rowToUser(r) {
+  return {
+    id: r.id,
+    name: r.name,
+    email: r.email,
+    passwordHash: r.password_hash,
   }
 }
 
@@ -88,19 +110,37 @@ export async function getParkingById(id) {
   return row ? rowToParking(row) : null
 }
 
-export async function getBookings(sessionId) {
-  return db.prepare('SELECT * FROM bookings WHERE session_id = ? ORDER BY id').all(sessionId).map(rowToBooking)
+export async function getBookings(userId) {
+  return db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY id').all(userId).map(rowToBooking)
 }
 
 export async function addBooking(booking) {
   db.prepare(
-    `INSERT INTO bookings (id,session_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+    `INSERT INTO bookings (id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
-  ).run(booking.id, booking.sessionId, booking.parkingId, booking.parkingName, booking.address,
+  ).run(booking.id, booking.userId, booking.parkingId, booking.parkingName, booking.address,
     booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice)
   return booking
 }
 
 export async function decrementParkingFreeSpots(parkingId) {
   db.prepare('UPDATE parkings SET free_spots = free_spots - 1 WHERE id = ? AND free_spots > 0').run(parkingId)
+}
+
+export async function createUser(user) {
+  db.prepare(
+    `INSERT INTO users (id, name, email, password_hash)
+     VALUES (?, ?, ?, ?)`,
+  ).run(user.id, user.name, user.email, user.passwordHash)
+  return { id: user.id, name: user.name, email: user.email }
+}
+
+export async function getUserByEmail(email) {
+  const row = db.prepare('SELECT * FROM users WHERE email = ?').get(email)
+  return row ? rowToUser(row) : null
+}
+
+export async function getUserById(id) {
+  const row = db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(id)
+  return row ?? null
 }
