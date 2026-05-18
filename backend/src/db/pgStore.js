@@ -19,6 +19,7 @@ export async function init() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS bookings (
       id            TEXT PRIMARY KEY,
+      session_id    TEXT NOT NULL,
       parking_id    TEXT NOT NULL REFERENCES parkings(id),
       parking_name  TEXT NOT NULL,
       address       TEXT NOT NULL,
@@ -28,6 +29,23 @@ export async function init() {
       time_to       TEXT NOT NULL,
       total_price   INTEGER NOT NULL
     )
+  `)
+  await pool.query(`
+    ALTER TABLE bookings
+    ADD COLUMN IF NOT EXISTS session_id TEXT
+  `)
+  await pool.query(`
+    UPDATE bookings
+    SET session_id = 'seed-session'
+    WHERE session_id IS NULL
+  `)
+  await pool.query(`
+    ALTER TABLE bookings
+    ALTER COLUMN session_id SET NOT NULL
+  `)
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS bookings_session_id_idx
+    ON bookings(session_id)
   `)
 
   const { rows } = await pool.query('SELECT count(*)::int AS cnt FROM parkings')
@@ -42,9 +60,9 @@ export async function init() {
     }
     for (const b of seed.bookings) {
       await pool.query(
-        `INSERT INTO bookings (id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-        [b.id, b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
+        `INSERT INTO bookings (id, session_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [b.id, b.sessionId ?? 'seed-session', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
       )
     }
     console.log('[pg] Начальные данные загружены')
@@ -62,7 +80,7 @@ function rowToParking(r) {
 
 function rowToBooking(r) {
   return {
-    id: r.id, parkingId: r.parking_id, parkingName: r.parking_name,
+    id: r.id, sessionId: r.session_id, parkingId: r.parking_id, parkingName: r.parking_name,
     address: r.address, spotNumber: r.spot_number, date: r.date,
     timeFrom: r.time_from, timeTo: r.time_to, totalPrice: r.total_price,
   }
@@ -78,16 +96,19 @@ export async function getParkingById(id) {
   return rows.length ? rowToParking(rows[0]) : null
 }
 
-export async function getBookings() {
-  const { rows } = await pool.query('SELECT * FROM bookings ORDER BY id')
+export async function getBookings(sessionId) {
+  const { rows } = await pool.query(
+    'SELECT * FROM bookings WHERE session_id = $1 ORDER BY id',
+    [sessionId],
+  )
   return rows.map(rowToBooking)
 }
 
 export async function addBooking(booking) {
   await pool.query(
-    `INSERT INTO bookings (id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [booking.id, booking.parkingId, booking.parkingName, booking.address,
+    `INSERT INTO bookings (id, session_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [booking.id, booking.sessionId, booking.parkingId, booking.parkingName, booking.address,
      booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice],
   )
   return booking

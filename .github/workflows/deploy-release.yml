@@ -1,0 +1,90 @@
+name: Deploy Release
+
+on:
+  push:
+    branches:
+      - staging
+      - production
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Deployment environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      image_tag:
+        description: Existing image tag to deploy
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || github.ref_name }}
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve release metadata
+        id: release
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            release_environment="${{ inputs.environment }}"
+            image_tag="${{ inputs.image_tag }}"
+          else
+            release_environment="${GITHUB_REF_NAME}"
+            image_tag="${GITHUB_SHA}"
+          fi
+          echo "release_environment=${release_environment}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${image_tag}" >> "$GITHUB_OUTPUT"
+          echo "app_image=${REGISTRY}/${IMAGE_NAME}:${image_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release env file
+        run: |
+          cat > deploy/.env.release <<EOF
+          APP_IMAGE=${{ steps.release.outputs.app_image }}
+          APP_PORT=${{ vars.APP_PORT }}
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          SESSION_SECRET=${{ secrets.SESSION_SECRET }}
+          SESSION_COOKIE_SECURE=${{ vars.SESSION_COOKIE_SECURE || 'false' }}
+          CORS_ORIGIN=${{ vars.CORS_ORIGIN }}
+          MIN_BOOKING_HOURS=${{ vars.MIN_BOOKING_HOURS || '1' }}
+          LOG_LEVEL=${{ vars.LOG_LEVEL || 'info' }}
+          RELEASE_VERSION=${{ steps.release.outputs.image_tag }}
+          RELEASE_ENVIRONMENT=${{ steps.release.outputs.release_environment }}
+          EOF
+
+      - name: Copy release bundle
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          source: "deploy/docker-compose.release.yml,deploy/nginx/default.conf,deploy/.env.release"
+          target: ${{ vars.DEPLOY_PATH }}
+          strip_components: 1
+
+      - name: Run remote deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USERNAME }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd ${{ vars.DEPLOY_PATH }}
+            docker login ${{ env.REGISTRY }} -u "${{ github.actor }}" -p "${{ secrets.GITHUB_TOKEN }}"
+            docker compose --env-file .env.release -f docker-compose.release.yml pull
+            docker compose --env-file .env.release -f docker-compose.release.yml up -d
+            echo "release=${{ steps.release.outputs.image_tag }} environment=${{ steps.release.outputs.release_environment }}"

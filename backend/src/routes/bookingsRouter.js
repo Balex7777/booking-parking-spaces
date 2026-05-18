@@ -3,9 +3,9 @@ import * as bookingService from '../services/bookingService.js'
 
 const router = Router()
 
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const bookings = await bookingService.getAllBookings()
+    const bookings = await bookingService.getAllBookings(req.sessionID)
     res.json(bookings)
   } catch (err) {
     res.status(500).json({ error: err.message })
@@ -19,6 +19,7 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Не указаны обязательные поля: parkingId, spotNumber, date, timeFrom, timeTo' })
     }
     const booking = await bookingService.createBooking({
+      sessionId: req.sessionID,
       parkingId,
       spotNumber,
       date,

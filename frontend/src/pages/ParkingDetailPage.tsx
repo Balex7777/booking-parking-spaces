@@ -10,7 +10,7 @@ import bookingClasses from './ParkingDetailPage.module.css'
 function ParkingDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [parking, setParking] = useState<ParkingLot | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(Boolean(id))
   const [spotNumber, setSpotNumber] = useState('')
   const [date, setDate] = useState('')
   const [timeFrom, setTimeFrom] = useState('')
@@ -20,7 +20,6 @@ function ParkingDetailPage() {
 
   useEffect(() => {
     if (!id) {
-      setLoading(false)
       return
     }
     getParkingById(id)

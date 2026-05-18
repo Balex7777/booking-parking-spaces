@@ -3,6 +3,7 @@ const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const url = path.startsWith('http') ? path : `${API_BASE}${path}`
   const res = await fetch(url, {
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...options?.headers,

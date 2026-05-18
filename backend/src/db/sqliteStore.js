@@ -24,6 +24,7 @@ export async function init() {
   db.exec(`
     CREATE TABLE IF NOT EXISTS bookings (
       id            TEXT PRIMARY KEY,
+      session_id    TEXT NOT NULL,
       parking_id    TEXT NOT NULL REFERENCES parkings(id),
       parking_name  TEXT NOT NULL,
       address       TEXT NOT NULL,
@@ -34,6 +35,12 @@ export async function init() {
       total_price   INTEGER NOT NULL
     )
   `)
+  const bookingColumns = db.prepare("PRAGMA table_info(bookings)").all()
+  if (!bookingColumns.some((column) => column.name === 'session_id')) {
+    db.exec("ALTER TABLE bookings ADD COLUMN session_id TEXT")
+    db.exec("UPDATE bookings SET session_id = 'seed-session' WHERE session_id IS NULL")
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS bookings_session_id_idx ON bookings(session_id)")
 
   const cnt = db.prepare('SELECT count(*) AS cnt FROM parkings').get().cnt
   if (cnt === 0) {
@@ -43,12 +50,12 @@ export async function init() {
        VALUES (?,?,?,?,?,?,?)`,
     )
     const insB = db.prepare(
-      `INSERT INTO bookings (id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
-       VALUES (?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO bookings (id,session_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
     )
     const tx = db.transaction(() => {
       for (const p of seed.parkings) insP.run(p.id, p.name, p.address, p.totalSpots, p.freeSpots, p.pricePerHour, p.description)
-      for (const b of seed.bookings) insB.run(b.id, b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
+      for (const b of seed.bookings) insB.run(b.id, b.sessionId ?? 'seed-session', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
     })
     tx()
     console.log('[sqlite] Начальные данные загружены')
@@ -66,7 +73,7 @@ function rowToParking(r) {
 
 function rowToBooking(r) {
   return {
-    id: r.id, parkingId: r.parking_id, parkingName: r.parking_name,
+    id: r.id, sessionId: r.session_id, parkingId: r.parking_id, parkingName: r.parking_name,
     address: r.address, spotNumber: r.spot_number, date: r.date,
     timeFrom: r.time_from, timeTo: r.time_to, totalPrice: r.total_price,
   }
@@ -81,15 +88,15 @@ export async function getParkingById(id) {
   return row ? rowToParking(row) : null
 }
 
-export async function getBookings() {
-  return db.prepare('SELECT * FROM bookings ORDER BY id').all().map(rowToBooking)
+export async function getBookings(sessionId) {
+  return db.prepare('SELECT * FROM bookings WHERE session_id = ? ORDER BY id').all(sessionId).map(rowToBooking)
 }
 
 export async function addBooking(booking) {
   db.prepare(
-    `INSERT INTO bookings (id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-  ).run(booking.id, booking.parkingId, booking.parkingName, booking.address,
+    `INSERT INTO bookings (id,session_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+  ).run(booking.id, booking.sessionId, booking.parkingId, booking.parkingName, booking.address,
     booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice)
   return booking
 }

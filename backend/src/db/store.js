@@ -13,6 +13,6 @@ export async function initDb() {
 
 export async function getParkings()                  { return adapter.getParkings() }
 export async function getParkingById(id)             { return adapter.getParkingById(id) }
-export async function getBookings()                  { return adapter.getBookings() }
+export async function getBookings(sessionId)         { return adapter.getBookings(sessionId) }
 export async function addBooking(booking)            { return adapter.addBooking(booking) }
 export async function decrementParkingFreeSpots(id)  { return adapter.decrementParkingFreeSpots(id) }

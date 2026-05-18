@@ -7,6 +7,7 @@
     "dev:backend": "cd backend && npm run dev",
     "build": "cd frontend && npm run build",
     "install:all": "cd frontend && npm install && cd ../backend && npm install",
-    "lint": "cd frontend && npm run lint"
+    "lint": "cd frontend && npm run lint",
+    "load:test": "node scripts/load-test.mjs"
   }
 }

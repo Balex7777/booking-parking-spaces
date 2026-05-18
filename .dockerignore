@@ -1,32 +1,10 @@
-# Зависимости (ставятся внутри образа)
-**/node_modules
-**/npm-debug.log*
-
-# Python (если появится)
-**/.venv
-**/venv
-**/__pycache__
-**/*.pyc
-
-# Git и IDE
 .git
-.gitignore
-.cursor
-.idea
-.vscode
-
-# Сборки и кэш (пересобираем в Docker)
+.github
+node_modules
+frontend/node_modules
+backend/node_modules
 frontend/dist
-
-# SQLite (в контейнере используется PostgreSQL)
-**/*.db
-**/*.db-wal
-**/*.db-shm
-
-# Прочее
-.DS_Store
-*.md
-.env
-.env.*
-!.env.example
-docker-compose.yml
+backend/data/*.db
+backend/.env
+frontend/.env
+npm-debug.log
