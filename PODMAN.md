@@ -41,10 +41,36 @@ export PATH="/opt/podman/bin:$PATH"
 ```bash
 cd /путь/к/ikbo-12-23-morev
 
-# Поднимает PostgreSQL + приложение
+# 1. Миграции (одноразовый контейнер, тот же образ)
+podman-compose run --rm migrate
+
+# 2. Поднять PostgreSQL, Redis, приложение и gateway
 podman-compose up --build -d
 
 # Браузер: http://localhost:8080
+```
+
+## Административные команды (one-off)
+
+Один образ, разные команды (без входа в running-контейнер):
+
+```bash
+# Миграции
+podman-compose run --rm migrate
+
+# Администратор
+podman run --rm \
+  -e DATABASE_URL=postgres://parking:parking_secret@db:5432/parking \
+  --network=ikbo-12-23-morev_default \
+  parking-app:local \
+  create-admin --email=admin@example.com --password=secret
+
+# Очистка сессий Redis
+podman run --rm \
+  -e REDIS_URL=redis://redis:6379 \
+  --network=ikbo-12-23-morev_default \
+  parking-app:local \
+  clear-cache
 ```
 
 Остановка:
@@ -161,6 +187,49 @@ curl http://localhost:8080/api/bookings
 ```
 
 PostgreSQL (сервис `db`) с named volume `pg_data` сохраняет данные между перезапусками.
+
+---
+
+## Graceful shutdown (SIGTERM)
+
+При остановке контейнера приложение:
+
+1. возвращает **503** на новые запросы;
+2. завершает уже начатые запросы (до `SHUTDOWN_GRACE_MS`, по умолчанию 15 с);
+3. закрывает Redis и PostgreSQL;
+4. выходит из процесса.
+
+В `docker-compose.yml` для `app-*` задано `stop_grace_period: 20s`.
+
+### Тест с Podman
+
+```bash
+podman-compose up --build -d
+CID=$(podman ps --filter name=app-1 -q | head -1)
+
+# Сигнал завершения (аналог docker kill --signal=SIGTERM)
+podman kill --signal=SIGTERM "$CID" &
+
+# Новые запросы во время shutdown
+curl -i http://localhost:8080/api/parkings
+# Ожидается: HTTP/1.1 503
+```
+
+Проверка готовности (быстрый старт, healthcheck):
+
+```bash
+curl http://localhost:8080/api/ready
+# {"status":"ready","ready":true}
+```
+
+### Утилизируемость под нагрузкой
+
+```bash
+npm run load:test -- http://localhost:8080 60 12 &
+CID=$(podman ps --filter name=app-2 -q | head -1)
+podman kill --signal=SIGTERM "$CID"
+# gateway продолжит отдавать ответы через app-1 и app-3
+```
 
 ---
 

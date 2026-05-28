@@ -2,7 +2,6 @@ import Database from 'better-sqlite3'
 import path from 'path'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
-import { loadSeedData } from './seed.js'
 
 const dbPath = path.join(config.dataDir, 'parking.db')
 let db
@@ -12,87 +11,18 @@ function getLegacySessionId(userId) {
   return `user:${userId}`
 }
 
-export async function init() {
+function refreshLegacySessionIdColumn() {
+  hasLegacySessionIdColumn = db
+    .prepare('PRAGMA table_info(bookings)')
+    .all()
+    .some((column) => column.name === 'session_id')
+}
+
+export async function connect() {
   db = new Database(dbPath)
   db.pragma('journal_mode = WAL')
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id             TEXT PRIMARY KEY,
-      name           TEXT NOT NULL,
-      email          TEXT NOT NULL UNIQUE,
-      password_hash  TEXT NOT NULL,
-      created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS parkings (
-      id             TEXT PRIMARY KEY,
-      name           TEXT NOT NULL,
-      address        TEXT NOT NULL,
-      total_spots    INTEGER NOT NULL,
-      free_spots     INTEGER NOT NULL,
-      price_per_hour INTEGER NOT NULL,
-      description    TEXT
-    )
-  `)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS bookings (
-      id            TEXT PRIMARY KEY,
-      user_id       TEXT NOT NULL REFERENCES users(id),
-      parking_id    TEXT NOT NULL REFERENCES parkings(id),
-      parking_name  TEXT NOT NULL,
-      address       TEXT NOT NULL,
-      spot_number   TEXT NOT NULL,
-      date          TEXT NOT NULL,
-      time_from     TEXT NOT NULL,
-      time_to       TEXT NOT NULL,
-      total_price   INTEGER NOT NULL
-    )
-  `)
-  const bookingColumns = db.prepare("PRAGMA table_info(bookings)").all()
-  hasLegacySessionIdColumn = bookingColumns.some((column) => column.name === 'session_id')
-  if (!bookingColumns.some((column) => column.name === 'user_id')) {
-    db.exec("ALTER TABLE bookings ADD COLUMN user_id TEXT")
-    db.exec("UPDATE bookings SET user_id = 'seed-user' WHERE user_id IS NULL")
-  }
-  if (hasLegacySessionIdColumn) {
-    db.exec("UPDATE bookings SET session_id = 'seed-session' WHERE session_id IS NULL")
-  }
-  db.exec("CREATE INDEX IF NOT EXISTS bookings_user_id_idx ON bookings(user_id)")
-  db.prepare(
-    `INSERT OR IGNORE INTO users (id, name, email, password_hash)
-     VALUES (?, ?, ?, ?)`,
-  ).run('seed-user', 'Демо пользователь', 'demo@example.com', 'seed-demo-hash')
-
-  const cnt = db.prepare('SELECT count(*) AS cnt FROM parkings').get().cnt
-  if (cnt === 0) {
-    const seed = loadSeedData()
-    const insP = db.prepare(
-      `INSERT INTO parkings (id,name,address,total_spots,free_spots,price_per_hour,description)
-       VALUES (?,?,?,?,?,?,?)`,
-    )
-    const insB = db.prepare(
-      `INSERT INTO bookings (id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    )
-    const tx = db.transaction(() => {
-      for (const p of seed.parkings) insP.run(p.id, p.name, p.address, p.totalSpots, p.freeSpots, p.pricePerHour, p.description)
-      for (const b of seed.bookings) {
-        if (hasLegacySessionIdColumn) {
-          db.prepare(
-            `INSERT INTO bookings (id,session_id,user_id,parking_id,parking_name,address,spot_number,date,time_from,time_to,total_price)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-          ).run(b.id, 'seed-session', 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
-        } else {
-          insB.run(b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice)
-        }
-      }
-    })
-    tx()
-    logger.info('db.seed_loaded', { dbType: 'sqlite' })
-  }
-  logger.info('db.ready', { dbType: 'sqlite', dbPath })
+  refreshLegacySessionIdColumn()
+  logger.info('db.connected', { dbType: 'sqlite', dbPath })
 }
 
 function rowToParking(r) {
@@ -170,4 +100,12 @@ export async function getUserByEmail(email) {
 export async function getUserById(id) {
   const row = db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(id)
   return row ?? null
+}
+
+export async function close() {
+  if (db) {
+    db.close()
+    db = undefined
+    logger.info('db.closed', { dbType: 'sqlite', dbPath })
+  }
 }

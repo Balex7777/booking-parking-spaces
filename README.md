@@ -78,6 +78,45 @@ API: `GET /api/parkings`, `GET /api/parkings/:id`, `GET /api/bookings`, `POST /a
 | **Бизнес-логика** | `src/services/bookingService.ts` — расчёт времени и стоимости брони на клиенте |
 | **Типы** | `src/types/parking.ts` — `ParkingLot`, `Booking`, `CreateBookingPayload` |
 
+## Административные команды (one-off)
+
+Один образ — разные режимы запуска через `node src/cli.js <команда>` (в Docker: `ENTRYPOINT` уже задан).
+
+| Команда | Назначение |
+|---------|------------|
+| `server` | HTTP-сервер (по умолчанию) |
+| `migrate` | Применить миграции БД и выйти |
+| `create-admin` | Создать пользователя-администратора |
+| `clear-cache` | Удалить сессии в Redis (`parking:sess:*`) |
+
+Локально:
+
+```bash
+cd backend
+npm run migrate
+npm run create-admin -- --email=admin@example.com --password=secret --name="Admin"
+npm run clear-cache   # нужен REDIS_URL
+npm start             # server
+```
+
+Через Podman/Docker (тот же образ, что и у приложения):
+
+```bash
+# Миграции перед деплоем
+podman-compose run --rm migrate
+
+# Создание администратора без входа в running-контейнер
+podman run --rm \
+  -e DATABASE_URL=postgres://parking:parking_secret@db:5432/parking \
+  --network=ikbo-12-23-morev_default \
+  parking-app:local \
+  create-admin --email=admin@example.com --password=secret
+```
+
+Миграции идемпотентны: состояние хранится в таблице `schema_migrations`, повторный `migrate` пропускает уже применённые версии.
+
+Файлы миграций: `backend/migrations/001_*.js`, `002_*.js`, `003_*.js`.
+
 ## CI/CD и релизы
 
 ### 1. Сборка образа с уникальным тегом
@@ -109,7 +148,8 @@ Workflow [.github/workflows/deploy-release.yml](.github/workflows/deploy-release
 - не собирает образ
 - берёт уже существующий tag (`workflow_dispatch`) или `${GITHUB_SHA}` для веток `staging`/`production`
 - формирует release как пару `APP_IMAGE + env config`
-- запускает удалённый `docker compose pull && docker compose up -d`
+- на сервере выполняет `docker compose pull`, затем **одноразовый** `docker compose run --rm migrate`, и только потом `docker compose up -d`
+- если `migrate` завершился с ошибкой, деплой прерывается (`set -e`)
 
 В логах приложения и в ответе `GET /api/meta` доступны:
 
@@ -123,6 +163,61 @@ Workflow [.github/workflows/deploy-release.yml](.github/workflows/deploy-release
 
 - Secrets: `DEPLOY_HOST`, `DEPLOY_USERNAME`, `DEPLOY_KEY`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `SESSION_SECRET`
 - Variables: `APP_PORT`, `CORS_ORIGIN`, `DEPLOY_PATH`, `MIN_BOOKING_HOURS`, `LOG_LEVEL`, `SESSION_COOKIE_SECURE`
+
+## Унификация окружений (dev = prod)
+
+Для разработки используйте тот же стек, что и в production — через `docker-compose.yml` / `podman-compose`:
+
+| Сервис | Образ | Назначение |
+|--------|-------|------------|
+| `db` | `postgres:16-alpine` | PostgreSQL |
+| `redis` | `redis:7-alpine` | Сессии |
+| `app-1..3` | собранный `Dockerfile` | Backend (stateless) |
+| `gateway` | `nginx:1.27-alpine` | Балансировка |
+
+```bash
+podman-compose up --build -d
+# или: docker compose up --build -d
+```
+
+Локальный `npm run dev:backend` с SQLite допустим для быстрых правок, но перед сдачей и деплоем проверяйте поведение в compose со **PostgreSQL + Redis**.
+
+## Graceful shutdown и быстрый старт
+
+### Сигналы SIGTERM / SIGINT
+
+При остановке контейнера backend:
+
+1. перестаёт принимать новые запросы (`503 Service Unavailable`);
+2. дожидается завершения уже выполняющихся (до `SHUTDOWN_GRACE_MS`, по умолчанию 15 с);
+3. закрывает Redis и пул PostgreSQL;
+4. завершает процесс.
+
+В compose задано `stop_grace_period: 20s` — чуть больше grace-периода приложения.
+
+### Проверка (Podman / Docker)
+
+```bash
+podman-compose up --build -d
+CONTAINER=$(podman ps --filter name=app-1 -q | head -1)
+
+# Во время shutdown новые запросы должны получать 503
+podman kill --signal=SIGTERM "$CONTAINER" &
+curl -i http://localhost:8080/api/parkings
+```
+
+Проверка readiness (контейнер готов принимать трафик):
+
+```bash
+curl http://localhost:8080/api/ready
+```
+
+### Быстрый старт
+
+- базовый образ `node:22-alpine`;
+- только production-зависимости (`npm ci --omit=dev`);
+- параллельная инициализация Redis и БД при старте;
+- healthcheck по `GET /api/ready` (без wget).
 
 ## Горизонтальное масштабирование
 

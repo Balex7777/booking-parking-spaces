@@ -27,4 +27,6 @@ export const config = {
   releaseVersion:  process.env.RELEASE_VERSION ?? 'dev',
   releaseEnv:      process.env.RELEASE_ENVIRONMENT ?? process.env.NODE_ENV ?? 'development',
   instanceId:      process.env.INSTANCE_ID ?? `${os.hostname()}-${process.pid}`,
+  shutdownGraceMs: Number(process.env.SHUTDOWN_GRACE_MS ?? 15_000),
+  shutdownMinDrainMs: Number(process.env.SHUTDOWN_MIN_DRAIN_MS ?? 500),
 }

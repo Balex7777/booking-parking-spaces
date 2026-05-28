@@ -1,7 +1,6 @@
 import pg from 'pg'
 import { config } from '../config.js'
 import { logger } from '../logger.js'
-import { loadSeedData } from './seed.js'
 
 const pool = new pg.Pool({ connectionString: config.databaseUrl })
 let hasLegacySessionIdColumn = false
@@ -10,118 +9,21 @@ function getLegacySessionId(userId) {
   return `user:${userId}`
 }
 
-export async function init() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id              TEXT PRIMARY KEY,
-      name            TEXT NOT NULL,
-      email           TEXT NOT NULL UNIQUE,
-      password_hash   TEXT NOT NULL,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS parkings (
-      id            TEXT PRIMARY KEY,
-      name          TEXT NOT NULL,
-      address       TEXT NOT NULL,
-      total_spots   INTEGER NOT NULL,
-      free_spots    INTEGER NOT NULL,
-      price_per_hour INTEGER NOT NULL,
-      description   TEXT
-    )
-  `)
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS bookings (
-      id            TEXT PRIMARY KEY,
-      user_id       TEXT NOT NULL REFERENCES users(id),
-      parking_id    TEXT NOT NULL REFERENCES parkings(id),
-      parking_name  TEXT NOT NULL,
-      address       TEXT NOT NULL,
-      spot_number   TEXT NOT NULL,
-      date          TEXT NOT NULL,
-      time_from     TEXT NOT NULL,
-      time_to       TEXT NOT NULL,
-      total_price   INTEGER NOT NULL
-    )
-  `)
-  await pool.query(`
-    ALTER TABLE bookings
-    ADD COLUMN IF NOT EXISTS user_id TEXT
-  `)
-  const legacySessionIdColumnResult = await pool.query(`
+async function refreshLegacySessionIdColumn() {
+  const { rows } = await pool.query(`
     SELECT EXISTS (
       SELECT 1
       FROM information_schema.columns
       WHERE table_name = 'bookings' AND column_name = 'session_id'
     ) AS exists
   `)
-  hasLegacySessionIdColumn = legacySessionIdColumnResult.rows[0].exists
-  const demoUser = {
-    id: 'seed-user',
-    name: 'Демо пользователь',
-    email: 'demo@example.com',
-    passwordHash: 'seed-demo-hash',
-  }
-  await pool.query(
-    `INSERT INTO users (id, name, email, password_hash)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (email) DO NOTHING`,
-    [demoUser.id, demoUser.name, demoUser.email, demoUser.passwordHash],
-  )
-  await pool.query(`
-    UPDATE bookings
-    SET user_id = 'seed-user'
-    WHERE user_id IS NULL
-  `)
-  if (hasLegacySessionIdColumn) {
-    await pool.query(`
-      UPDATE bookings
-      SET session_id = 'seed-session'
-      WHERE session_id IS NULL
-    `)
-    await pool.query(`
-      ALTER TABLE bookings
-      ALTER COLUMN session_id DROP NOT NULL
-    `)
-  }
-  await pool.query(`
-    ALTER TABLE bookings
-    ALTER COLUMN user_id SET NOT NULL
-  `)
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS bookings_user_id_idx
-    ON bookings(user_id)
-  `)
+  hasLegacySessionIdColumn = rows[0].exists
+}
 
-  const { rows } = await pool.query('SELECT count(*)::int AS cnt FROM parkings')
-  if (rows[0].cnt === 0) {
-    const seed = loadSeedData()
-    for (const p of seed.parkings) {
-      await pool.query(
-        `INSERT INTO parkings (id, name, address, total_spots, free_spots, price_per_hour, description)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [p.id, p.name, p.address, p.totalSpots, p.freeSpots, p.pricePerHour, p.description],
-      )
-    }
-    for (const b of seed.bookings) {
-      if (hasLegacySessionIdColumn) {
-        await pool.query(
-          `INSERT INTO bookings (id, session_id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-          [b.id, 'seed-session', 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
-        )
-      } else {
-        await pool.query(
-          `INSERT INTO bookings (id, user_id, parking_id, parking_name, address, spot_number, date, time_from, time_to, total_price)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [b.id, 'seed-user', b.parkingId, b.parkingName, b.address, b.spotNumber, b.date, b.timeFrom, b.timeTo, b.totalPrice],
-        )
-      }
-    }
-    logger.info('db.seed_loaded', { dbType: 'postgres' })
-  }
-  logger.info('db.ready', { dbType: 'postgres' })
+export async function connect() {
+  await pool.query('SELECT 1')
+  await refreshLegacySessionIdColumn()
+  logger.info('db.connected', { dbType: 'postgres' })
 }
 
 function rowToParking(r) {
@@ -210,4 +112,9 @@ export async function getUserByEmail(email) {
 export async function getUserById(id) {
   const { rows } = await pool.query('SELECT id, name, email FROM users WHERE id = $1', [id])
   return rows.length ? rows[0] : null
+}
+
+export async function close() {
+  await pool.end()
+  logger.info('db.closed', { dbType: 'postgres' })
 }

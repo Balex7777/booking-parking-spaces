@@ -8,6 +8,7 @@
     "build": "cd frontend && npm run build",
     "install:all": "cd frontend && npm install && cd ../backend && npm install",
     "lint": "cd frontend && npm run lint",
-    "load:test": "node scripts/load-test.mjs"
+    "load:test": "node scripts/load-test.mjs",
+    "test:shutdown": "node scripts/test-graceful-shutdown.mjs"
   }
 }
