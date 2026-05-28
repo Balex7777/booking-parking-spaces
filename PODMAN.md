@@ -42,7 +42,7 @@ export PATH="/opt/podman/bin:$PATH"
 cd /путь/к/ikbo-12-23-morev
 
 # 1. Миграции (одноразовый контейнер, тот же образ)
-podman-compose run --rm migrate
+podman-compose --profile tools run --rm migrate
 
 # 2. Поднять PostgreSQL, Redis, приложение и gateway
 podman-compose up --build -d
@@ -56,7 +56,7 @@ podman-compose up --build -d
 
 ```bash
 # Миграции
-podman-compose run --rm migrate
+podman-compose --profile tools run --rm migrate
 
 # Администратор
 podman run --rm \

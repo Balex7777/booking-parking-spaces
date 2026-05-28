@@ -103,7 +103,7 @@ npm start             # server
 
 ```bash
 # Миграции перед деплоем
-podman-compose run --rm migrate
+podman-compose --profile tools run --rm migrate
 
 # Создание администратора без входа в running-контейнер
 podman run --rm \

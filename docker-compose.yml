@@ -94,6 +94,7 @@ services:
     healthcheck: *app-healthcheck
 
   migrate:
+    profiles: ["tools"]
     image: ${APP_IMAGE:-parking-app:local}
     build: .
     environment:

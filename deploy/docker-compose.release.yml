@@ -45,6 +45,7 @@ services:
       retries: 15
 
   migrate:
+    profiles: ["tools"]
     image: ${APP_IMAGE}
     environment:
       <<: *app-env
