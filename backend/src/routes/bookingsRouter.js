@@ -32,6 +32,33 @@ router.get('/', async (req, res) => {
   }
 })
 
+router.get('/:id', async (req, res) => {
+  try {
+    const bookings = await bookingService.getAllBookings(req.session.userId)
+    const booking = bookings.find((item) => item.id === req.params.id)
+    if (!booking) {
+      req.log?.warn('booking.not_found', {
+        userId: req.session.userId,
+        bookingId: req.params.id,
+      })
+      return res.status(404).json({ error: 'Бронирование не найдено' })
+    }
+    req.log?.info('booking.fetched', {
+      userId: req.session.userId,
+      bookingId: booking.id,
+    })
+    res.json(booking)
+  } catch (err) {
+    req.log?.error('booking.fetch_failed', {
+      userId: req.session.userId,
+      bookingId: req.params.id,
+      message: err.message,
+      stack: err.stack,
+    })
+    res.status(500).json({ error: err.message })
+  }
+})
+
 router.post('/', async (req, res) => {
   try {
     const { parkingId, spotNumber, date, timeFrom, timeTo } = req.body
@@ -57,11 +84,71 @@ router.post('/', async (req, res) => {
     })
     res.status(201).json(booking)
   } catch (err) {
-    const code = err.message.includes('не найдена') || err.message.includes('свободных') || err.message.includes('Минимальное')
+    const code = err.message.includes('не найдена')
+      || err.message.includes('свободных')
+      || err.message.includes('Минимальное')
+      || err.message.includes('Некоррект')
       ? 400
       : 500
     req.log?.error('booking.create_failed', {
       userId: req.session.userId,
+      message: err.message,
+      stack: err.stack,
+      statusCode: code,
+    })
+    res.status(code).json({ error: err.message })
+  }
+})
+
+router.put('/:id', async (req, res) => {
+  try {
+    const { spotNumber, date, timeFrom, timeTo } = req.body
+    const booking = await bookingService.updateExistingBooking({
+      bookingId: req.params.id,
+      userId: req.session.userId,
+      spotNumber,
+      date,
+      timeFrom,
+      timeTo,
+    })
+    req.log?.info('booking.updated', {
+      userId: req.session.userId,
+      bookingId: booking.id,
+    })
+    res.json(booking)
+  } catch (err) {
+    const code = err.message.includes('не найдено')
+      ? 404
+      : err.message.includes('Некоррект') || err.message.includes('Минимальное')
+        ? 400
+      : 500
+    req.log?.error('booking.update_failed', {
+      userId: req.session.userId,
+      bookingId: req.params.id,
+      message: err.message,
+      stack: err.stack,
+      statusCode: code,
+    })
+    res.status(code).json({ error: err.message })
+  }
+})
+
+router.delete('/:id', async (req, res) => {
+  try {
+    await bookingService.deleteExistingBooking({
+      bookingId: req.params.id,
+      userId: req.session.userId,
+    })
+    req.log?.info('booking.deleted', {
+      userId: req.session.userId,
+      bookingId: req.params.id,
+    })
+    res.status(204).end()
+  } catch (err) {
+    const code = err.message.includes('не найдено') ? 404 : 500
+    req.log?.error('booking.delete_failed', {
+      userId: req.session.userId,
+      bookingId: req.params.id,
       message: err.message,
       stack: err.stack,
       statusCode: code,

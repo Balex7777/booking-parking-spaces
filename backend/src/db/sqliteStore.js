@@ -63,6 +63,11 @@ export async function getBookings(userId) {
   return db.prepare('SELECT * FROM bookings WHERE user_id = ? ORDER BY id').all(userId).map(rowToBooking)
 }
 
+export async function getBookingById(id) {
+  const row = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id)
+  return row ? rowToBooking(row) : null
+}
+
 export async function addBooking(booking) {
   if (hasLegacySessionIdColumn) {
     db.prepare(
@@ -80,8 +85,27 @@ export async function addBooking(booking) {
   return booking
 }
 
+export async function updateBooking(booking) {
+  db.prepare(
+    `UPDATE bookings
+     SET spot_number = ?, date = ?, time_from = ?, time_to = ?, total_price = ?
+     WHERE id = ?`,
+  ).run(booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice, booking.id)
+  return booking
+}
+
+export async function deleteBooking(id) {
+  db.prepare('DELETE FROM bookings WHERE id = ?').run(id)
+}
+
 export async function decrementParkingFreeSpots(parkingId) {
   db.prepare('UPDATE parkings SET free_spots = free_spots - 1 WHERE id = ? AND free_spots > 0').run(parkingId)
+}
+
+export async function incrementParkingFreeSpots(parkingId) {
+  db.prepare(
+    'UPDATE parkings SET free_spots = MIN(total_spots, free_spots + 1) WHERE id = ?',
+  ).run(parkingId)
 }
 
 export async function createUser(user) {

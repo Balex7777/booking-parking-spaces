@@ -69,6 +69,11 @@ export async function getBookings(userId) {
   return rows.map(rowToBooking)
 }
 
+export async function getBookingById(id) {
+  const { rows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [id])
+  return rows.length ? rowToBooking(rows[0]) : null
+}
+
 export async function addBooking(booking) {
   if (hasLegacySessionIdColumn) {
     await pool.query(
@@ -88,9 +93,32 @@ export async function addBooking(booking) {
   return booking
 }
 
+export async function updateBooking(booking) {
+  await pool.query(
+    `UPDATE bookings
+     SET spot_number = $2, date = $3, time_from = $4, time_to = $5, total_price = $6
+     WHERE id = $1`,
+    [booking.id, booking.spotNumber, booking.date, booking.timeFrom, booking.timeTo, booking.totalPrice],
+  )
+  return booking
+}
+
+export async function deleteBooking(id) {
+  await pool.query('DELETE FROM bookings WHERE id = $1', [id])
+}
+
 export async function decrementParkingFreeSpots(parkingId) {
   await pool.query(
     'UPDATE parkings SET free_spots = free_spots - 1 WHERE id = $1 AND free_spots > 0',
+    [parkingId],
+  )
+}
+
+export async function incrementParkingFreeSpots(parkingId) {
+  await pool.query(
+    `UPDATE parkings
+     SET free_spots = LEAST(total_spots, free_spots + 1)
+     WHERE id = $1`,
     [parkingId],
   )
 }

@@ -35,6 +35,13 @@ export type CreateBookingPayload = {
   timeTo: string
 }
 
+export type UpdateBookingPayload = {
+  spotNumber: string
+  date: string
+  timeFrom: string
+  timeTo: string
+}
+
 export type LoginPayload = {
   email: string
   password: string
